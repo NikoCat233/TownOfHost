@@ -46,8 +46,10 @@ public abstract class RoleBase : IDisposable
         this.hasTasks = hasTasks ?? (roleInfo.CustomRoleType == CustomRoleTypes.Crewmate ? () => HasTask.True : () => HasTask.False);
         HasAbility = hasAbility ?? roleInfo.BaseRoleType.Invoke() is
             RoleTypes.Shapeshifter or
+            RoleTypes.Phantom or
             RoleTypes.Engineer or
             RoleTypes.Scientist or
+            RoleTypes.Tracker or
             RoleTypes.GuardianAngel or
             RoleTypes.CrewmateGhost or
             RoleTypes.ImpostorGhost;
@@ -86,9 +88,9 @@ public abstract class RoleBase : IDisposable
     protected class RoleRPCSender : IDisposable
     {
         public MessageWriter Writer;
-        public RoleRPCSender(RoleBase role, CustomRPC rpcType)
+        public RoleRPCSender(RoleBase role)
         {
-            Writer = AmongUsClient.Instance.StartRpcImmediately(PlayerControl.LocalPlayer.NetId, (byte)rpcType, SendOption.Reliable, -1);
+            Writer = AmongUsClient.Instance.StartRpcImmediately(PlayerControl.LocalPlayer.NetId, (byte)CustomRPC.CustomRoleSync, SendOption.Reliable, -1);
             Writer.Write(role.Player.PlayerId);
         }
         public void Dispose()
@@ -102,17 +104,16 @@ public abstract class RoleBase : IDisposable
     /// </summary>
     /// <param name="rpcType">送信するCustomRPC</param>
     /// <returns>送信に使用するRoleRPCSender</returns>
-    protected RoleRPCSender CreateSender(CustomRPC rpcType)
+    protected RoleRPCSender CreateSender()
     {
-        return new RoleRPCSender(this, rpcType);
+        return new RoleRPCSender(this);
     }
     /// <summary>
     /// RPCを受け取った時に呼ばれる関数
     /// RoleRPCSenderで送信されたPlayerIdは削除されて渡されるため意識しなくてもよい。
     /// </summary>
     /// <param name="reader">届いたRPCの情報</param>
-    /// <param name="rpcType">届いたCustomRPC</param>
-    public virtual void ReceiveRPC(MessageReader reader, CustomRPC rpcType)
+    public virtual void ReceiveRPC(MessageReader reader)
     { }
     /// <summary>
     /// 能力ボタンを使えるかどうか
@@ -143,6 +144,22 @@ public abstract class RoleBase : IDisposable
     { }
 
     /// <summary>
+    /// 自視点のみ変身する
+    /// 抜け殻を自視点のみに残すことが可能
+    /// </summary>
+    public virtual bool CanDesyncShapeshift => false;
+
+    /// <summary>
+    /// シェイプシフトチェック時に呼ばれる
+    /// 自分自身が変身したときのみ呼ばれる
+    /// animateを操作して変身アニメーションのカットも可能
+    /// </summary>
+    /// <param name="target">変身先</param>
+    /// <param name="animate">アニメーションを再生するかどうか</param>
+    /// <returns>falseを返すと変身がキャンセルされる</returns>
+    public virtual bool OnCheckShapeshift(PlayerControl target, ref bool animate) => true;
+
+    /// <summary>
     /// シェイプシフト時に呼ばれる関数
     /// 自分自身について呼ばれるため本人確認不要
     /// Host以外も呼ばれるので注意
@@ -168,7 +185,7 @@ public abstract class RoleBase : IDisposable
     /// </summary>
     /// <param name="reporter">通報したプレイヤー</param>
     /// <param name="target">通報されたプレイヤー</param>
-    public virtual void OnReportDeadBody(PlayerControl reporter, GameData.PlayerInfo target)
+    public virtual void OnReportDeadBody(PlayerControl reporter, NetworkedPlayerInfo target)
     { }
 
     /// <summary>
@@ -177,7 +194,7 @@ public abstract class RoleBase : IDisposable
     /// </summary>
     /// <param name="physics"></param>
     /// <param name="id"></param>
-    /// <returns>falseを返すとベントから追い出され、他人からアニメーションも見られません</returns>
+    /// <returns>falseを返すとベントから追い出されます</returns>
     public virtual bool OnEnterVent(PlayerPhysics physics, int ventId) => true;
 
     /// <summary>
@@ -209,7 +226,7 @@ public abstract class RoleBase : IDisposable
     /// </summary>
     /// <param name="exiled">追放されるプレイヤー</param>
     /// <param name="DecidedWinner">勝者を確定させるか</param>
-    public virtual void OnExileWrapUp(GameData.PlayerInfo exiled, ref bool DecidedWinner)
+    public virtual void OnExileWrapUp(NetworkedPlayerInfo exiled, ref bool DecidedWinner)
     { }
 
     /// <summary>
@@ -328,6 +345,8 @@ public abstract class RoleBase : IDisposable
     {
         StringNames? str = Player.Data.Role.Role switch
         {
+            RoleTypes.Phantom => Player.Data.Role.TryCast<PhantomRole>(out var phantomRole) ? (phantomRole.IsInvisible ? StringNames.PhantomAbilityUndo : StringNames.PhantomAbility) : null,
+            RoleTypes.Tracker => Player.Data.Role.TryCast<TrackerRole>(out var trackerRole) ? (trackerRole.isTrackingActive ? StringNames.TrackerAbilityUndo : StringNames.TrackerAbility) : null,
             RoleTypes.Engineer => StringNames.VentAbility,
             RoleTypes.Scientist => StringNames.VitalsAbility,
             RoleTypes.Shapeshifter => StringNames.ShapeshiftAbility,

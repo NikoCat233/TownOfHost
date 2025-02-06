@@ -32,11 +32,14 @@ namespace TownOfHost
             }
             if (AmongUsClient.Instance.AmHost)
             {
-                var roleClass = player.GetRoleClass();
-                if (roleClass != null)
+                if (role < CustomRoles.NotAssigned)
                 {
-                    roleClass.Dispose();
-                    CustomRoleManager.CreateInstance(role, player);
+                    var roleClass = player.GetRoleClass();
+                    if (roleClass != null)
+                    {
+                        roleClass.Dispose();
+                        CustomRoleManager.CreateInstance(role, player);
+                    }
                 }
 
                 MessageWriter writer = AmongUsClient.Instance.StartRpcImmediately(PlayerControl.LocalPlayer.NetId, (byte)CustomRPC.SetCustomRole, Hazel.SendOption.Reliable, -1);
@@ -70,7 +73,7 @@ namespace TownOfHost
             var client = player.GetClient();
             return client == null ? -1 : client.Id;
         }
-        public static CustomRoles GetCustomRole(this GameData.PlayerInfo player)
+        public static CustomRoles GetCustomRole(this NetworkedPlayerInfo player)
         {
             return player == null || player.Object == null ? CustomRoles.Crewmate : player.Object.GetCustomRole();
         }
@@ -145,6 +148,7 @@ namespace TownOfHost
 
             var clientId = seer.GetClientId();
             MessageWriter writer = AmongUsClient.Instance.StartRpcImmediately(player.NetId, (byte)RpcCalls.SetName, Hazel.SendOption.Reliable, clientId);
+            writer.Write(player.Data.NetId);
             writer.Write(name);
             writer.Write(DontShowOnModdedClient);
             AmongUsClient.Instance.FinishRpcImmediately(writer);
@@ -156,11 +160,12 @@ namespace TownOfHost
             if (player == null) return;
             if (AmongUsClient.Instance.ClientId == clientId)
             {
-                player.SetRole(role);
+                player.StartCoroutine(player.CoSetRole(role, false));
                 return;
             }
             MessageWriter writer = AmongUsClient.Instance.StartRpcImmediately(player.NetId, (byte)RpcCalls.SetRole, Hazel.SendOption.Reliable, clientId);
             writer.Write((ushort)role);
+            writer.Write(false);
             AmongUsClient.Instance.FinishRpcImmediately(writer);
         }
 
@@ -234,6 +239,35 @@ namespace TownOfHost
                 この変更により、役職としての守護天使が無効化されます。
                 ホストのクールダウンは直接リセットします。
             */
+        }
+        public static void RpcSpecificShapeshift(this PlayerControl player, PlayerControl target, bool shouldAnimate)
+        {
+            if (!AmongUsClient.Instance.AmHost) return;
+            if (player.PlayerId == 0)
+            {
+                player.Shapeshift(target, shouldAnimate);
+                return;
+            }
+            MessageWriter messageWriter = AmongUsClient.Instance.StartRpcImmediately(player.NetId, (byte)RpcCalls.Shapeshift, SendOption.Reliable, player.GetClientId());
+            messageWriter.WriteNetObject(target);
+            messageWriter.Write(shouldAnimate);
+            AmongUsClient.Instance.FinishRpcImmediately(messageWriter);
+        }
+        public static void RpcSpecificRejectShapeshift(this PlayerControl player, PlayerControl target, bool shouldAnimate)
+        {
+            if (!AmongUsClient.Instance.AmHost) return;
+            foreach (var seer in Main.AllPlayerControls)
+            {
+                if (seer != player)
+                {
+                    MessageWriter msg = AmongUsClient.Instance.StartRpcImmediately(player.NetId, (byte)RpcCalls.RejectShapeshift, SendOption.Reliable, seer.GetClientId());
+                    AmongUsClient.Instance.FinishRpcImmediately(msg);
+                }
+                else
+                {
+                    player.RpcSpecificShapeshift(target, shouldAnimate);
+                }
+            }
         }
         public static void RpcDesyncUpdateSystem(this PlayerControl target, SystemTypes systemType, int amount)
         {
@@ -445,13 +479,13 @@ namespace TownOfHost
             // Other Clients
             if (killer.PlayerId != 0)
             {
-                var writer = AmongUsClient.Instance.StartRpcImmediately(killer.NetId, (byte)RpcCalls.MurderPlayer, SendOption.Reliable);
+                var writer = AmongUsClient.Instance.StartRpcImmediately(killer.NetId, (byte)RpcCalls.MurderPlayer, SendOption.Reliable, killer.GetClientId());
                 writer.WriteNetObject(target);
                 writer.Write((int)MurderResultFlags.FailedProtected);
                 AmongUsClient.Instance.FinishRpcImmediately(writer);
             }
         }
-        public static void NoCheckStartMeeting(this PlayerControl reporter, GameData.PlayerInfo target)
+        public static void NoCheckStartMeeting(this PlayerControl reporter, NetworkedPlayerInfo target)
         { /*サボタージュ中でも関係なしに会議を起こせるメソッド
             targetがnullの場合はボタンとなる*/
             MeetingRoomManager.Instance.AssignSelf(reporter, target);
@@ -566,6 +600,28 @@ namespace TownOfHost
                     return room;
             }
             return null;
+        }
+        public static void RpcSnapToForced(this PlayerControl pc, Vector2 position)
+        {
+            var netTransform = pc.NetTransform;
+            if (AmongUsClient.Instance.AmClient)
+            {
+                netTransform.SnapTo(position, (ushort)(netTransform.lastSequenceId + 128));
+            }
+            ushort newSid = (ushort)(netTransform.lastSequenceId + 2);
+            MessageWriter messageWriter = AmongUsClient.Instance.StartRpcImmediately(netTransform.NetId, (byte)RpcCalls.SnapTo, SendOption.Reliable);
+            NetHelpers.WriteVector2(position, messageWriter);
+            messageWriter.Write(newSid);
+            AmongUsClient.Instance.FinishRpcImmediately(messageWriter);
+        }
+        public static void RpcSnapToDesync(this PlayerControl pc, PlayerControl target, Vector2 position)
+        {
+            var net = pc.NetTransform;
+            var num = (ushort)(net.lastSequenceId + 2);
+            MessageWriter messageWriter = AmongUsClient.Instance.StartRpcImmediately(net.NetId, (byte)RpcCalls.SnapTo, SendOption.None, target.GetClientId());
+            NetHelpers.WriteVector2(position, messageWriter);
+            messageWriter.Write(num);
+            AmongUsClient.Instance.FinishRpcImmediately(messageWriter);
         }
         public static bool IsProtected(this PlayerControl self) => self.protectedByGuardianId > -1;
 

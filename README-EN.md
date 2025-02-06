@@ -15,7 +15,7 @@ This mod is not affiliated with Among Us or Innersloth LLC, and the content cont
 
 ## Releases
 
-AmongUs Version: **2023.10.24**
+AmongUs Version: **2024.9.4**
 
 **Latest Version: [Here](https://github.com/tukasa0001/TownOfHost/releases/latest)**
 
@@ -41,6 +41,9 @@ Note that if a player other than the host plays with this mod installed, the fol
 - Sheriff, Arsonist, Jackal, and other roles can close doors, but please don't use it because the system can't limit it.
 - The dead player chat can be seen when exile screen by anti blackout, but this is not a bug.
 - The "Confirm Ejects" option will not work if any of the following roles are enabled: Sheriff, Arsonist, Jackal, PlagueDoctor.
+- When more than about 9 players join a lobby, sometimes particular players may get disconnected.To address this issue, we have added an optional countermeasure function on a trial basis. <b>Please Turn ON only when disconnections occurs. </b>
+- The folder for log output has been changed. To see where they are saved, select Open Log Folder from the TOH settings screen.
+- Successful completion is now automatically saved in the log folder.
 
 ## Features
 ### Hotkeys
@@ -61,7 +64,7 @@ Note that if a player other than the host plays with this mod installed, the fol
 | HotKey      | Function                                                                           | Usable Scene  |
 | ----------- | ---------------------------------------------------------------------------------- | ------------- |
 | `Tab`       | Option list page feed                                                              | Lobby         |
-| `Ctrl`+`F1` | Output log to desktop                                                              | Anywhere      |
+| `Ctrl`+`F1` | Output log to Log Folder                                                           | Anywhere      |
 | `F10`       | Open AmongUs folder                                                                | Anywhere      |
 | `F11`       | Change resolution<br>480x270 → 640x360 → 800x450 → 1280x720 → 1600x900 → 1920x1080 | Anywhere      |
 | `T`+`F5`    | Reload custom translation file                                                     | Anywhere      |
@@ -354,7 +357,6 @@ Depending on option, they can also see kill flash when other impostor kills.<br>
 - EvilTrackers can select a target after every meeting or once in a game, when marked left-triangle (◁).
 - When they Shapeshift to impostor or dead player (unavailable for target), they stay able to select target.
 - Shapeshift cooldown is fixed to __"5s"__ (can select target) or to __"255s"__ (cannot).
-- Shapeshift duration is fixed to __"1s"__, which means EvilTrackers can hardly pretend to be someone else.
 - EvilTrackers can Assign [SidekickMadmate](#sidekickmadmate) by Shapeshift.
 
 #### Game Options
@@ -1244,11 +1246,13 @@ Various devices can be disabled.
 
 The time limit for some sabotage can be modified.
 
-| Name                        |
-| --------------------------- |
-| Modify Sabotage TimeLimit   |
-| ┣ Polus Reactor TimeLimit   |
-| ┗ Airship Reactor TimeLimit |
+| Name                            |
+| ------------------------------- |
+| Modify Sabotage TimeLimit       |
+| ┣ Polus Reactor TimeLimit       |
+| ┣ Airship Reactor TimeLimit     |
+| ┣Fungle Reactor Duration        |
+| ┗Fungle Mushroom Mixup Duration |
 
 ## Sabotage Cooldown Control
 

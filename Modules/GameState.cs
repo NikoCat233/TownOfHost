@@ -31,6 +31,8 @@ namespace TownOfHost
         }
         public (DateTime, byte) RealKiller;
         public PlainShipRoom LastRoom;
+        /// <summary>会議等の後に湧いた後かどうか<br/>ホスト以外は正しい値にならないので注意</summary>
+        public bool HasSpawned { get; set; } = false;
         public Dictionary<byte, string> TargetColorData;
         public PlayerState(byte playerId)
         {
@@ -56,9 +58,12 @@ namespace TownOfHost
                     RoleTypes.Crewmate => CustomRoles.Crewmate,
                     RoleTypes.Engineer => CustomRoles.Engineer,
                     RoleTypes.Scientist => CustomRoles.Scientist,
+                    RoleTypes.Noisemaker => CustomRoles.Noisemaker,
+                    RoleTypes.Tracker => CustomRoles.Tracker,
                     RoleTypes.GuardianAngel => CustomRoles.GuardianAngel,
                     RoleTypes.Impostor => CustomRoles.Impostor,
                     RoleTypes.Shapeshifter => CustomRoles.Shapeshifter,
+                    RoleTypes.Phantom => CustomRoles.Phantom,
                     _ => CustomRoles.Crewmate,
                 };
         }
@@ -223,7 +228,7 @@ namespace TownOfHost
     public static class MeetingStates
     {
         public static DeadBody[] DeadBodies = null;
-        public static GameData.PlayerInfo ReportTarget = null;
+        public static NetworkedPlayerInfo ReportTarget = null;
         public static bool IsEmergencyMeeting => ReportTarget == null;
         public static bool IsExistDeadBody => DeadBodies.Length > 0;
         public static bool MeetingCalled = false;

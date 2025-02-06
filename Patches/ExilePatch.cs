@@ -8,7 +8,7 @@ namespace TownOfHost
 {
     class ExileControllerWrapUpPatch
     {
-        public static GameData.PlayerInfo AntiBlackout_LastExiled;
+        public static NetworkedPlayerInfo AntiBlackout_LastExiled;
         [HarmonyPatch(typeof(ExileController), nameof(ExileController.WrapUp))]
         class BaseExileControllerPatch
         {
@@ -16,11 +16,11 @@ namespace TownOfHost
             {
                 try
                 {
-                    WrapUpPostfix(__instance.exiled);
+                    WrapUpPostfix(__instance.initData.networkedPlayer);
                 }
                 finally
                 {
-                    WrapUpFinalizer(__instance.exiled);
+                    WrapUpFinalizer(__instance.initData.networkedPlayer);
                 }
             }
         }
@@ -32,19 +32,29 @@ namespace TownOfHost
             {
                 try
                 {
-                    WrapUpPostfix(__instance.exiled);
+                    WrapUpPostfix(__instance.initData.networkedPlayer);
                 }
                 finally
                 {
-                    WrapUpFinalizer(__instance.exiled);
+                    WrapUpFinalizer(__instance.initData.networkedPlayer);
                 }
             }
         }
-        static void WrapUpPostfix(GameData.PlayerInfo exiled)
+        static void WrapUpPostfix(NetworkedPlayerInfo exiled)
         {
             if (AntiBlackout.OverrideExiledPlayer)
             {
                 exiled = AntiBlackout_LastExiled;
+            }
+
+            var mapId = Main.NormalOptions.MapId;
+            // エアシップではまだ湧かない
+            if ((MapNames)mapId != MapNames.Airship)
+            {
+                foreach (var state in PlayerState.AllPlayerStates.Values)
+                {
+                    state.HasSpawned = true;
+                }
             }
 
             bool DecidedWinner = false;
@@ -76,7 +86,7 @@ namespace TownOfHost
             if (RandomSpawn.IsRandomSpawn())
             {
                 RandomSpawn.SpawnMap map;
-                switch (Main.NormalOptions.MapId)
+                switch (mapId)
                 {
                     case 0:
                         map = new RandomSpawn.SkeldSpawnMap();
@@ -103,7 +113,7 @@ namespace TownOfHost
             Utils.NotifyRoles();
         }
 
-        static void WrapUpFinalizer(GameData.PlayerInfo exiled)
+        static void WrapUpFinalizer(NetworkedPlayerInfo exiled)
         {
             //WrapUpPostfixで例外が発生しても、この部分だけは確実に実行されます。
             if (AmongUsClient.Instance.AmHost)

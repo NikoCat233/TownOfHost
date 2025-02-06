@@ -368,7 +368,7 @@ namespace TownOfHost
             return (text, color);
         }
 
-        public static bool HasTasks(GameData.PlayerInfo p, bool ForRecompute = true)
+        public static bool HasTasks(NetworkedPlayerInfo p, bool ForRecompute = true)
         {
             if (GameStates.IsLobby) return false;
             //Tasksがnullの場合があるのでその場合タスク無しとする
@@ -543,24 +543,68 @@ namespace TownOfHost
                 if (RoleAssignManager.OptionAssignMode.GetBool())
                 {
                     ShowChildrenSettings(RoleAssignManager.OptionAssignMode, ref sb);
+                    CheckPageChange(PlayerId, sb);
                 }
                 foreach (var role in Options.CustomRoleCounts)
                 {
                     if (!role.Key.IsEnable()) continue;
+                    if (role.Key is CustomRoles.HASFox or CustomRoles.HASTroll) continue;
+
                     sb.Append($"\n【{GetRoleName(role.Key)}×{role.Key.GetCount()}】\n");
                     ShowChildrenSettings(Options.CustomRoleSpawnChances[role.Key], ref sb);
+                    CheckPageChange(PlayerId, sb);
                 }
                 foreach (var opt in OptionItem.AllOptions.Where(x => x.GetBool() && x.Parent == null && x.Id >= 80000 && !x.IsHiddenOn(Options.CurrentGameMode)))
                 {
-                    if (opt.Name is "KillFlashDuration" or "RoleAssigningAlgorithm")
-                        sb.Append($"\n【{opt.GetName(true)}: {opt.GetString()}】\n");
+                    if (opt.Name is "RandomSpawn")
+                    {
+                        foreach (var randomOpt in opt.Children)
+                        {
+                            if ((randomOpt.Id / 100) % 10 != mapId) continue;
+                            //現在のマップのみ表示する
+                            if (randomOpt.GetBool())
+                            {
+                                //Onの時は頭に改ページを入れる
+                                CheckPageChange(PlayerId, sb, true);
+                                sb.Append($"\n【{opt.GetName(true)}】");
+                                sb.Append($"\n {randomOpt.GetName(true)}: {randomOpt.GetString()}\n");
+
+                                ShowChildrenSettings(randomOpt, ref sb, 1);
+                            }
+                            else
+                            {
+                                //オフならそのままで大丈夫
+                                sb.Append($"\n【{opt.GetName(true)}】");
+                                sb.Append($"\n {randomOpt.GetName(true)}: {randomOpt.GetString()}\n");
+                            }
+                        }
+                        CheckPageChange(PlayerId, sb);
+                    }
                     else
-                        sb.Append($"\n【{opt.GetName(true)}】\n");
-                    ShowChildrenSettings(opt, ref sb);
+                    {
+                        if (opt.Name is "KillFlashDuration" or "RoleAssigningAlgorithm")
+                            sb.Append($"\n【{opt.GetName(true)}: {opt.GetString()}】\n");
+                        else
+                            sb.Append($"\n【{opt.GetName(true)}】\n");
+                        ShowChildrenSettings(opt, ref sb);
+                        CheckPageChange(PlayerId, sb);
+                    }
                 }
             }
             SendMessage(sb.ToString(), PlayerId, removeTags: false);
         }
+
+        private static void CheckPageChange(byte PlayerId, StringBuilder sb, bool force = false)
+        {
+            //2Byte文字想定で1000byt越えるならページを変える
+            if (force || sb.Length > 500)
+            {
+                SendMessage(sb.ToString(), PlayerId, removeTags: false);
+                sb.Clear();
+                sb.AppendFormat("<size={0}>", ActiveSettingsSize);
+            }
+        }
+
         public static void CopyCurrentSettings()
         {
             var sb = new StringBuilder();
@@ -752,7 +796,7 @@ namespace TownOfHost
             cachedPlayers[playerId] = player;
             return player;
         }
-        public static GameData.PlayerInfo GetPlayerInfoById(int PlayerId) =>
+        public static NetworkedPlayerInfo GetPlayerInfoById(int PlayerId) =>
             GameData.Instance.AllPlayers.ToArray().Where(info => info.PlayerId == PlayerId).FirstOrDefault();
         private static StringBuilder SelfMark = new(20);
         private static StringBuilder SelfSuffix = new(20);
@@ -1000,47 +1044,82 @@ namespace TownOfHost
             foreach (char c in t) bc += Encoding.GetEncoding("UTF-8").GetByteCount(c.ToString()) == 1 ? 1 : 2;
             return t?.PadRight(Mathf.Max(num - (bc - t.Length), 0));
         }
+        public static DirectoryInfo GetLogFolder(bool auto = false)
+        {
+            var folder = Directory.CreateDirectory($"{Application.persistentDataPath}/TownOfHost/Logs");
+            if (auto)
+            {
+                folder = Directory.CreateDirectory($"{folder.FullName}/AutoLogs");
+            }
+            return folder;
+        }
         public static void DumpLog()
         {
-            string t = DateTime.Now.ToString("yyyy-MM-dd_HH.mm.ss");
-            string fileName = $"{Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)}/TownOfHost-v{Main.PluginVersion}-{t}.log";
-            FileInfo file = new(@$"{Environment.CurrentDirectory}/BepInEx/LogOutput.log");
-            file.CopyTo(fileName);
-            OpenDirectory(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
+            var logs = GetLogFolder();
+            var filename = CopyLog(logs.FullName);
+            OpenDirectory(filename);
             if (PlayerControl.LocalPlayer != null)
-                HudManager.Instance?.Chat?.AddChat(PlayerControl.LocalPlayer, "デスクトップにログを保存しました。バグ報告チケットを作成してこのファイルを添付してください。");
+                HudManager.Instance?.Chat?.AddChat(PlayerControl.LocalPlayer, Translator.GetString("Message.LogsSavedInLogsFolder"));
+        }
+        public static void SaveNowLog()
+        {
+            var logs = GetLogFolder(true);
+            // 7日以上前のログを削除
+            logs.EnumerateFiles().Where(f => f.CreationTime < DateTime.Now.AddDays(-7)).ToList().ForEach(f => f.Delete());
+            CopyLog(logs.FullName);
+        }
+        public static string CopyLog(string path)
+        {
+            string t = DateTime.Now.ToString("yyyy-MM-dd_HH.mm.ss");
+            string fileName = $"{path}/TownOfHost-v{Main.PluginVersion}-{t}.log";
+            FileInfo file = new(@$"{Environment.CurrentDirectory}/BepInEx/LogOutput.log");
+            var logFile = file.CopyTo(fileName);
+            return logFile.FullName;
+        }
+        public static void OpenLogFolder()
+        {
+            var logs = GetLogFolder(true);
+            OpenDirectory(logs.FullName);
         }
         public static void OpenDirectory(string path)
         {
-            var startInfo = new ProcessStartInfo(path)
-            {
-                UseShellExecute = true,
-            };
-            Process.Start(startInfo);
+            Process.Start("Explorer.exe", $"/select,{path}");
         }
         public static string SummaryTexts(byte id, bool isForChat)
         {
-            // 全プレイヤー中最長の名前の長さからプレイヤー名の後の水平位置を計算する
-            // 1em ≒ 半角2文字
-            // 空白は0.5emとする
-            // SJISではアルファベットは1バイト，日本語は基本的に2バイト
-            var longestNameByteCount = Main.AllPlayerNames.Values.Select(name => name.GetByteCount()).OrderByDescending(byteCount => byteCount).FirstOrDefault();
-            //最大11.5emとする(★+日本語10文字分+半角空白)
-            var pos = Math.Min(((float)longestNameByteCount / 2) + 1.5f /* ★+末尾の半角空白 */ , 11.5f);
 
             var builder = new StringBuilder();
-            builder.Append(isForChat ? Main.AllPlayerNames[id] : ColorString(Main.PlayerColors[id], Main.AllPlayerNames[id]));
-            builder.AppendFormat("<pos={0}em>", pos).Append(isForChat ? GetProgressText(id).RemoveColorTags() : GetProgressText(id)).Append("</pos>");
-            // "(00/00) " = 4em
-            pos += 4f;
-            builder.AppendFormat("<pos={0}em>", pos).Append(GetVitalText(id)).Append("</pos>");
-            // "Lover's Suicide " = 8em
-            // "回線切断 " = 4.5em
-            pos += DestroyableSingleton<TranslationController>.Instance.currentLanguage.languageID == SupportedLangs.English ? 8f : 4.5f;
-            builder.AppendFormat("<pos={0}em>", pos);
-            builder.Append(isForChat ? GetTrueRoleName(id, false).RemoveColorTags() : GetTrueRoleName(id, false));
-            builder.Append(isForChat ? GetSubRolesText(id).RemoveColorTags() : GetSubRolesText(id));
-            builder.Append("</pos>");
+            // チャットならposタグを使わない(文字数削減)
+            if (isForChat)
+            {
+                builder.Append(Main.AllPlayerNames[id]);
+                builder.Append(": ").Append(GetProgressText(id).RemoveColorTags());
+                builder.Append(' ').Append(GetVitalText(id));
+                builder.Append(' ').Append(GetTrueRoleName(id, false).RemoveColorTags());
+                builder.Append(' ').Append(GetSubRolesText(id).RemoveColorTags());
+            }
+            else
+            {
+                // 全プレイヤー中最長の名前の長さからプレイヤー名の後の水平位置を計算する
+                // 1em ≒ 半角2文字
+                // 空白は0.5emとする
+                // SJISではアルファベットは1バイト，日本語は基本的に2バイト
+                var longestNameByteCount = Main.AllPlayerNames.Values.Select(name => name.GetByteCount()).OrderByDescending(byteCount => byteCount).FirstOrDefault();
+                //最大11.5emとする(★+日本語10文字分+半角空白)
+                var pos = Math.Min(((float)longestNameByteCount / 2) + 1.5f /* ★+末尾の半角空白 */ , 11.5f);
+                builder.Append(ColorString(Main.PlayerColors[id], Main.AllPlayerNames[id]));
+                builder.AppendFormat("<pos={0}em>", pos).Append(GetProgressText(id)).Append("</pos>");
+                // "(00/00) " = 4em
+                pos += 4f;
+                builder.AppendFormat("<pos={0}em>", pos).Append(GetVitalText(id)).Append("</pos>");
+                // "Lover's Suicide " = 8em
+                // "回線切断 " = 4.5em
+                pos += DestroyableSingleton<TranslationController>.Instance.currentLanguage.languageID == SupportedLangs.English ? 8f : 4.5f;
+                builder.AppendFormat("<pos={0}em>", pos);
+                builder.Append(GetTrueRoleName(id, false));
+                builder.Append(GetSubRolesText(id));
+                builder.Append("</pos>");
+            }
             return builder.ToString();
         }
         public static string RemoveHtmlTags(this string str) => Regex.Replace(str, "<[^>]*?>", "");
